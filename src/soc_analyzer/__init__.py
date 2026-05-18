@@ -1,4 +1,4 @@
-"""SOC Log Analyzer — Security Operations Center threat detection tool."""
+"""soc_analyzer — Security Operations Center log analysis tool."""
 
 __version__ = "1.0.0"
-__author__ = "AlexPhilip01"
+__all__ = ["__version__"]

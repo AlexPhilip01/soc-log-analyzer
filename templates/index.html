@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOC Log Analyzer</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0a0c10;
+    --bg2:       #0f1117;
+    --bg3:       #161a24;
+    --border:    #1e2535;
+    --text:      #e2e8f0;
+    --muted:     #64748b;
+    --accent:    #38bdf8;
+    --critical:  #ef4444;
+    --high:      #f97316;
+    --medium:    #eab308;
+    --low:       #3b82f6;
+    --info:      #6b7280;
+    --green:     #22c55e;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline effect */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* Header */
+  .header {
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 60px;
+    background: var(--bg2);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .logo-icon {
+    width: 32px; height: 32px;
+    background: var(--accent);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+
+  .logo-text {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 1.1rem;
+    letter-spacing: -0.02em;
+  }
+
+  .logo-text span { color: var(--accent); }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* Layout */
+  .container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem;
+  }
+
+  /* Upload Section */
+  .upload-section {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .upload-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+  }
+
+  .upload-card h2 {
+    font-family: 'Syne', sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 1.5rem;
+  }
+
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 2.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+
+  .dropzone:hover, .dropzone.drag-over {
+    border-color: var(--accent);
+    background: rgba(56,189,248,0.03);
+  }
+
+  .dropzone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .dropzone-icon { font-size: 2.5rem; margin-bottom: 0.75rem; }
+
+  .dropzone-text {
+    font-size: 0.85rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .dropzone-text strong { color: var(--text); }
+
+  .file-name {
+    margin-top: 0.75rem;
+    font-size: 0.8rem;
+    color: var(--accent);
+    display: none;
+  }
+
+  /* Options panel */
+  .options-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+  }
+
+  .options-card h2 {
+    font-family: 'Syne', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 1.25rem;
+  }
+
+  .option-group {
+    margin-bottom: 1rem;
+  }
+
+  .option-group label {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.4rem;
+  }
+
+  .option-group select,
+  .option-group input[type="number"] {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 0.5rem 0.75rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .option-group select:focus,
+  .option-group input:focus {
+    border-color: var(--accent);
+  }
+
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.4rem 0;
+  }
+
+  .toggle-row label {
+    font-size: 0.78rem;
+    color: var(--text);
+    margin: 0;
+  }
+
+  .toggle {
+    position: relative;
+    width: 36px; height: 20px;
+  }
+
+  .toggle input { opacity: 0; width: 0; height: 0; }
+
+  .toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: var(--border);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: 0.2s;
+  }
+
+  .toggle-slider::before {
+    content: '';
+    position: absolute;
+    width: 14px; height: 14px;
+    left: 3px; top: 3px;
+    background: var(--muted);
+    border-radius: 50%;
+    transition: 0.2s;
+  }
+
+  .toggle input:checked + .toggle-slider { background: rgba(56,189,248,0.3); }
+  .toggle input:checked + .toggle-slider::before {
+    transform: translateX(16px);
+    background: var(--accent);
+  }
+
+  .btn-analyze {
+    width: 100%;
+    margin-top: 1.25rem;
+    padding: 0.75rem;
+    background: var(--accent);
+    color: #0a0c10;
+    border: none;
+    border-radius: 8px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    transition: all 0.2s;
+  }
+
+  .btn-analyze:hover { background: #7dd3fc; transform: translateY(-1px); }
+  .btn-analyze:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  /* Sample buttons */
+  .samples {
+    margin-top: 1.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .samples p {
+    font-size: 0.72rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.75rem;
+  }
+
+  .sample-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .btn-sample {
+    padding: 0.5rem 0.75rem;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s;
+  }
+
+  .btn-sample:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* Loading */
+  .loading {
+    display: none;
+    text-align: center;
+    padding: 3rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+
+  .spinner {
+    width: 40px; height: 40px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 1rem;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Results */
+  #results { display: none; }
+
+  .results-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .results-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 800;
+  }
+
+  .results-meta {
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  /* Stat cards */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .stat-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+
+  .stat-card.critical::before { background: var(--critical); }
+  .stat-card.high::before     { background: var(--high); }
+  .stat-card.medium::before   { background: var(--medium); }
+  .stat-card.low::before      { background: var(--low); }
+  .stat-card.info::before     { background: var(--info); }
+
+  .stat-label {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+  }
+
+  .stat-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 2rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .stat-card.critical .stat-value { color: var(--critical); }
+  .stat-card.high .stat-value     { color: var(--high); }
+  .stat-card.medium .stat-value   { color: var(--medium); }
+  .stat-card.low .stat-value      { color: var(--low); }
+  .stat-card.info .stat-value     { color: var(--info); }
+
+  /* Charts row */
+  .charts-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .chart-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem;
+  }
+
+  .chart-card h3 {
+    font-family: 'Syne', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 1rem;
+  }
+
+  /* Bar chart */
+  .bar-chart { display: flex; flex-direction: column; gap: 0.6rem; }
+
+  .bar-row {
+    display: grid;
+    grid-template-columns: 90px 1fr 40px;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.75rem;
+  }
+
+  .bar-label { color: var(--muted); text-align: right; }
+
+  .bar-track {
+    height: 8px;
+    background: var(--bg3);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.6s ease;
+  }
+
+  .bar-count { color: var(--text); text-align: right; font-size: 0.72rem; }
+
+  /* IP table */
+  .ip-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+
+  .ip-table tr { border-bottom: 1px solid var(--border); }
+  .ip-table tr:last-child { border-bottom: none; }
+
+  .ip-table td {
+    padding: 0.5rem 0;
+    color: var(--muted);
+  }
+
+  .ip-table td:first-child { color: var(--accent); font-weight: 600; }
+  .ip-table td:last-child { text-align: right; color: var(--text); }
+
+  .ip-geo { font-size: 0.68rem; color: var(--muted); }
+
+  /* Timeline */
+  .timeline-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 80px;
+  }
+
+  .timeline-bar {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 1px;
+    cursor: pointer;
+  }
+
+  .timeline-seg {
+    width: 100%;
+    border-radius: 2px 2px 0 0;
+    min-height: 2px;
+    transition: opacity 0.2s;
+  }
+
+  .timeline-bar:hover .timeline-seg { opacity: 0.7; }
+
+  .timeline-label {
+    font-size: 0.6rem;
+    color: var(--muted);
+    margin-top: 4px;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+  }
+
+  /* Events table */
+  .events-section {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .events-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    gap: 1rem;
+  }
+
+  .events-toolbar h3 {
+    font-family: 'Syne', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .search-box {
+    flex: 1;
+    max-width: 300px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.75rem;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    outline: none;
+  }
+
+  .search-box:focus { border-color: var(--accent); }
+
+  .filter-btns {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  .filter-btn {
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+    background: var(--bg3);
+    color: var(--muted);
+  }
+
+  .filter-btn.active, .filter-btn:hover {
+    border-color: currentColor;
+  }
+
+  .filter-btn.all.active   { color: var(--accent); }
+  .filter-btn.critical     { color: var(--critical); }
+  .filter-btn.high         { color: var(--high); }
+  .filter-btn.medium       { color: var(--medium); }
+  .filter-btn.low          { color: var(--low); }
+  .filter-btn.info         { color: var(--info); }
+
+  /* Events table */
+  .events-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+
+  .events-table th {
+    padding: 0.6rem 1.25rem;
+    text-align: left;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg3);
+    font-weight: 500;
+  }
+
+  .events-table td {
+    padding: 0.65rem 1.25rem;
+    border-bottom: 1px solid rgba(30,37,53,0.5);
+    vertical-align: top;
+  }
+
+  .events-table tr:last-child td { border-bottom: none; }
+
+  .events-table tr:hover td { background: rgba(56,189,248,0.02); }
+
+  .sev-badge {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+
+  .rule-id { color: var(--accent); font-size: 0.72rem; }
+
+  .desc-text { color: var(--text); line-height: 1.4; }
+
+  .raw-line {
+    display: none;
+    margin-top: 0.4rem;
+    padding: 0.4rem 0.6rem;
+    background: var(--bg3);
+    border-radius: 4px;
+    font-size: 0.68rem;
+    color: var(--muted);
+    word-break: break-all;
+    white-space: pre-wrap;
+  }
+
+  .expand-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.65rem;
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    transition: color 0.15s;
+  }
+
+  .expand-btn:hover { color: var(--accent); }
+
+  .ip-cell { color: var(--accent); font-weight: 600; }
+  .ts-cell  { color: var(--muted); white-space: nowrap; }
+  .cat-cell { color: var(--muted); }
+
+  .export-btn {
+    padding: 0.4rem 0.9rem;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .export-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Pagination */
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .page-btn {
+    padding: 0.3rem 0.6rem;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .page-btn:hover, .page-btn.active { border-color: var(--accent); color: var(--accent); }
+  .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .page-info { font-size: 0.72rem; color: var(--muted); padding: 0 0.5rem; }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--muted);
+  }
+
+  .empty-state .icon { font-size: 3rem; margin-bottom: 1rem; }
+  .empty-state p { font-size: 0.85rem; }
+
+  /* Alert banner */
+  .alert-banner {
+    display: none;
+    padding: 0.75rem 1.25rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    font-size: 0.82rem;
+    border: 1px solid;
+  }
+
+  .alert-banner.error {
+    background: rgba(239,68,68,0.1);
+    border-color: var(--critical);
+    color: #fca5a5;
+  }
+
+  .alert-banner.success {
+    background: rgba(34,197,94,0.1);
+    border-color: var(--green);
+    color: #86efac;
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+  <div class="logo">
+    <div class="logo-icon">🛡️</div>
+    <div class="logo-text">SOC <span>Log Analyzer</span></div>
+  </div>
+  <div class="header-right">
+    <div class="status-dot"></div>
+    <span>SYSTEM ONLINE</span>
+    <span id="clock" style="color:var(--text)"></span>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Upload Section -->
+  <div class="upload-section">
+    <div class="upload-card">
+      <h2>▸ Upload Log File</h2>
+
+      <div class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" accept=".log,.txt,.csv,.json">
+        <div class="dropzone-icon">📂</div>
+        <div class="dropzone-text">
+          <strong>Drop your log file here</strong><br>
+          or click to browse<br><br>
+          Supports: SSH auth.log · Apache/Nginx access.log · Windows Events CSV
+        </div>
+        <div class="file-name" id="fileName"></div>
+      </div>
+
+      <div class="samples">
+        <p>▸ Try a sample</p>
+        <div class="sample-btns">
+          <button class="btn-sample" onclick="loadSample('ssh')">🔐 SSH Auth Log — brute force attacks</button>
+          <button class="btn-sample" onclick="loadSample('apache')">🌐 Apache Access Log — web attacks</button>
+          <button class="btn-sample" onclick="loadSample('windows')">🪟 Windows Event Log — privilege escalation</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="options-card">
+      <h2>▸ Options</h2>
+
+      <div class="option-group">
+        <label>Min Severity</label>
+        <select id="optSeverity">
+          <option value="">All severities</option>
+          <option value="CRITICAL">CRITICAL only</option>
+          <option value="HIGH">HIGH and above</option>
+          <option value="MEDIUM">MEDIUM and above</option>
+          <option value="LOW">LOW and above</option>
+        </select>
+      </div>
+
+      <div class="option-group">
+        <label>Category Filter</label>
+        <select id="optCategory">
+          <option value="">All categories</option>
+          <option value="brute_force">Brute Force</option>
+          <option value="lfi">LFI / Path Traversal</option>
+          <option value="sqli">SQL Injection</option>
+          <option value="xss">XSS</option>
+          <option value="rce">Remote Code Execution</option>
+          <option value="recon">Reconnaissance</option>
+          <option value="auth">Authentication</option>
+          <option value="privilege">Privilege Escalation</option>
+          <option value="persistence">Persistence</option>
+          <option value="evasion">Evasion</option>
+        </select>
+      </div>
+
+      <div class="option-group">
+        <label>Brute Force Threshold</label>
+        <input type="number" id="optThreshold" value="5" min="1" max="100">
+      </div>
+
+      <div class="toggle-row">
+        <label>GeoIP Lookup</label>
+        <label class="toggle">
+          <input type="checkbox" id="optGeo">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <button class="btn-analyze" id="btnAnalyze" onclick="analyzeFile()">
+        ▸ ANALYZE
+      </button>
+    </div>
+  </div>
+
+  <!-- Alert -->
+  <div class="alert-banner" id="alertBanner"></div>
+
+  <!-- Loading -->
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    Analyzing log file...
+  </div>
+
+  <!-- Results -->
+  <div id="results">
+
+    <div class="results-header">
+      <div>
+        <div class="results-title" id="resultsTitle">Threat Report</div>
+        <div class="results-meta" id="resultsMeta"></div>
+      </div>
+      <div style="display:flex;gap:0.75rem">
+        <button class="export-btn" onclick="exportJSON()">⬇ JSON</button>
+        <button class="export-btn" onclick="exportCSV()">⬇ CSV</button>
+      </div>
+    </div>
+
+    <!-- Stat cards -->
+    <div class="stat-grid">
+      <div class="stat-card critical">
+        <div class="stat-label">Critical</div>
+        <div class="stat-value" id="statCritical">0</div>
+      </div>
+      <div class="stat-card high">
+        <div class="stat-label">High</div>
+        <div class="stat-value" id="statHigh">0</div>
+      </div>
+      <div class="stat-card medium">
+        <div class="stat-label">Medium</div>
+        <div class="stat-value" id="statMedium">0</div>
+      </div>
+      <div class="stat-card low">
+        <div class="stat-label">Low</div>
+        <div class="stat-value" id="statLow">0</div>
+      </div>
+      <div class="stat-card info">
+        <div class="stat-label">Info</div>
+        <div class="stat-value" id="statInfo">0</div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-row">
+      <div class="chart-card">
+        <h3>Attack Categories</h3>
+        <div class="bar-chart" id="catChart"></div>
+      </div>
+      <div class="chart-card">
+        <h3>Top Attacker IPs</h3>
+        <table class="ip-table" id="ipTable"></table>
+      </div>
+      <div class="chart-card">
+        <h3>Timeline (by hour)</h3>
+        <div class="timeline-chart" id="timelineChart"></div>
+      </div>
+    </div>
+
+    <!-- Events -->
+    <div class="events-section">
+      <div class="events-toolbar">
+        <h3>Events</h3>
+        <input class="search-box" id="searchBox" placeholder="Search events…" oninput="filterEvents()">
+        <div class="filter-btns">
+          <button class="filter-btn all active" onclick="setSevFilter('')">ALL</button>
+          <button class="filter-btn critical" onclick="setSevFilter('CRITICAL')">CRIT</button>
+          <button class="filter-btn high" onclick="setSevFilter('HIGH')">HIGH</button>
+          <button class="filter-btn medium" onclick="setSevFilter('MEDIUM')">MED</button>
+          <button class="filter-btn low" onclick="setSevFilter('LOW')">LOW</button>
+          <button class="filter-btn info" onclick="setSevFilter('INFO')">INFO</button>
+        </div>
+      </div>
+
+      <div id="eventsContainer"></div>
+
+      <div class="pagination" id="pagination"></div>
+    </div>
+
+  </div><!-- /results -->
+
+</div><!-- /container -->
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let allEvents = [];
+let filteredEvents = [];
+let currentPage = 1;
+const PAGE_SIZE = 25;
+let sevFilter = '';
+let lastData = null;
+
+// ── Clock ──────────────────────────────────────────────────────────────────
+function updateClock() {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-GB');
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── File input ─────────────────────────────────────────────────────────────
+const fileInput = document.getElementById('fileInput');
+const dropzone  = document.getElementById('dropzone');
+const fileName  = document.getElementById('fileName');
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) {
+    fileName.textContent = '📄 ' + fileInput.files[0].name;
+    fileName.style.display = 'block';
+  }
+});
+
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) {
+    fileInput.files = e.dataTransfer.files;
+    fileName.textContent = '📄 ' + e.dataTransfer.files[0].name;
+    fileName.style.display = 'block';
+  }
+});
+
+// ── Analyze ────────────────────────────────────────────────────────────────
+async function analyzeFile() {
+  if (!fileInput.files[0]) { showAlert('Please select a log file first.', 'error'); return; }
+
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  formData.append('brute_threshold', document.getElementById('optThreshold').value);
+  formData.append('severity', document.getElementById('optSeverity').value);
+  formData.append('category', document.getElementById('optCategory').value);
+  formData.append('geo', document.getElementById('optGeo').checked ? 'true' : 'false');
+
+  showLoading(true);
+  hideAlert();
+
+  try {
+    const res = await fetch('/analyze', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) { showAlert(data.error || 'Analysis failed.', 'error'); return; }
+    renderResults(data);
+  } catch (err) {
+    showAlert('Network error: ' + err.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+async function loadSample(type) {
+  showLoading(true);
+  hideAlert();
+  try {
+    const res = await fetch('/sample/' + type);
+    const data = await res.json();
+    if (!res.ok) { showAlert(data.error || 'Failed to load sample.', 'error'); return; }
+    renderResults(data);
+  } catch (err) {
+    showAlert('Network error: ' + err.message, 'error');
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────
+const SEV_COLORS = {
+  CRITICAL: '#ef4444', HIGH: '#f97316', MEDIUM: '#eab308', LOW: '#3b82f6', INFO: '#6b7280'
+};
+
+function renderResults(data) {
+  lastData = data;
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('resultsTitle').textContent = data.filename;
+  document.getElementById('resultsMeta').textContent =
+    `${data.total} events · Analyzed at ${data.analyzed_at}`;
+
+  // Stat cards
+  document.getElementById('statCritical').textContent = data.sev_counts.CRITICAL || 0;
+  document.getElementById('statHigh').textContent     = data.sev_counts.HIGH || 0;
+  document.getElementById('statMedium').textContent   = data.sev_counts.MEDIUM || 0;
+  document.getElementById('statLow').textContent      = data.sev_counts.LOW || 0;
+  document.getElementById('statInfo').textContent     = data.sev_counts.INFO || 0;
+
+  renderCatChart(data.cat_counts);
+  renderIPTable(data.top_ips);
+  renderTimeline(data.timeline);
+
+  allEvents = data.events;
+  sevFilter = '';
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('.filter-btn.all').classList.add('active');
+  filterEvents();
+
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+}
+
+function renderCatChart(cats) {
+  const el = document.getElementById('catChart');
+  const max = Math.max(...Object.values(cats), 1);
+  el.innerHTML = Object.entries(cats).map(([cat, count]) => `
+    <div class="bar-row">
+      <span class="bar-label">${cat.replace('_',' ')}</span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${(count/max*100).toFixed(1)}%;background:var(--accent)"></div>
+      </div>
+      <span class="bar-count">${count}</span>
+    </div>`).join('');
+}
+
+function renderIPTable(ips) {
+  const el = document.getElementById('ipTable');
+  if (!ips.length) { el.innerHTML = '<tr><td colspan="2" style="color:var(--muted);padding:0.5rem 0;font-size:0.78rem">No source IPs detected</td></tr>'; return; }
+  el.innerHTML = ips.map(r => `
+    <tr>
+      <td>
+        ${r.ip}
+        ${r.geo ? `<div class="ip-geo">${r.geo}</div>` : ''}
+      </td>
+      <td>${r.count} hits</td>
+    </tr>`).join('');
+}
+
+function renderTimeline(timeline) {
+  const el = document.getElementById('timelineChart');
+  const hours = Object.keys(timeline).sort();
+  if (!hours.length) { el.innerHTML = '<span style="color:var(--muted);font-size:0.75rem">No timestamps</span>'; return; }
+  const maxTotal = Math.max(...hours.map(h => Object.values(timeline[h]).reduce((a,b)=>a+b,0)), 1);
+  const sevs = ['CRITICAL','HIGH','MEDIUM','LOW','INFO'];
+  el.innerHTML = hours.map(h => {
+    const total = Object.values(timeline[h]).reduce((a,b)=>a+b,0);
+    const segs = sevs.filter(s => timeline[h][s]).map(s =>
+      `<div class="timeline-seg" style="height:${(timeline[h][s]/maxTotal*70).toFixed(0)}px;background:${SEV_COLORS[s]}" title="${s}: ${timeline[h][s]}"></div>`
+    ).join('');
+    return `<div class="timeline-bar">${segs}<div class="timeline-label">${h}</div></div>`;
+  }).join('');
+}
+
+// ── Events table ───────────────────────────────────────────────────────────
+function setSevFilter(sev) {
+  sevFilter = sev;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  const target = sev ? document.querySelector(`.filter-btn.${sev.toLowerCase()}`) : document.querySelector('.filter-btn.all');
+  if (target) target.classList.add('active');
+  filterEvents();
+}
+
+function filterEvents() {
+  const q = document.getElementById('searchBox').value.toLowerCase();
+  filteredEvents = allEvents.filter(ev => {
+    if (sevFilter && ev.severity !== sevFilter) return false;
+    if (q && !JSON.stringify(ev).toLowerCase().includes(q)) return false;
+    return true;
+  });
+  currentPage = 1;
+  renderEventsPage();
+}
+
+function renderEventsPage() {
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page  = filteredEvents.slice(start, start + PAGE_SIZE);
+  const container = document.getElementById('eventsContainer');
+
+  if (!filteredEvents.length) {
+    container.innerHTML = `<div class="empty-state"><div class="icon">🔍</div><p>No events match the current filters.</p></div>`;
+    document.getElementById('pagination').innerHTML = '';
+    return;
+  }
+
+  const rows = page.map((ev, i) => `
+    <tr>
+      <td>
+        <span class="sev-badge" style="background:${ev.color}22;color:${ev.color};border:1px solid ${ev.color}44">
+          ${ev.severity}
+        </span>
+      </td>
+      <td>
+        <div class="rule-id">${ev.icon} ${ev.rule_id}</div>
+      </td>
+      <td>
+        <div class="desc-text">${ev.description}</div>
+        <button class="expand-btn" onclick="toggleRaw(this)">▸ raw</button>
+        <div class="raw-line">${escHtml(ev.raw_line)}</div>
+      </td>
+      <td class="ip-cell">${ev.source_ip}</td>
+      <td class="cat-cell">${ev.category}</td>
+      <td class="ts-cell">${ev.timestamp}</td>
+    </tr>`).join('');
+
+  container.innerHTML = `
+    <table class="events-table">
+      <thead>
+        <tr>
+          <th>Severity</th>
+          <th>Rule</th>
+          <th>Description</th>
+          <th>Source IP</th>
+          <th>Category</th>
+          <th>Timestamp</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  renderPagination();
+}
+
+function renderPagination() {
+  const total = Math.ceil(filteredEvents.length / PAGE_SIZE);
+  if (total <= 1) { document.getElementById('pagination').innerHTML = ''; return; }
+
+  let html = `<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>◀</button>`;
+  for (let i = 1; i <= total; i++) {
+    if (i === 1 || i === total || Math.abs(i - currentPage) <= 2) {
+      html += `<button class="page-btn ${i===currentPage?'active':''}" onclick="goPage(${i})">${i}</button>`;
+    } else if (Math.abs(i - currentPage) === 3) {
+      html += `<span class="page-info">…</span>`;
+    }
+  }
+  html += `<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage===total?'disabled':''}>▶</button>`;
+  html += `<span class="page-info">${filteredEvents.length} events</span>`;
+  document.getElementById('pagination').innerHTML = html;
+}
+
+function goPage(p) {
+  const total = Math.ceil(filteredEvents.length / PAGE_SIZE);
+  if (p < 1 || p > total) return;
+  currentPage = p;
+  renderEventsPage();
+  document.querySelector('.events-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+function toggleRaw(btn) {
+  const raw = btn.nextElementSibling;
+  const visible = raw.style.display === 'block';
+  raw.style.display = visible ? 'none' : 'block';
+  btn.textContent = visible ? '▸ raw' : '▾ raw';
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Export ─────────────────────────────────────────────────────────────────
+function exportJSON() {
+  if (!lastData) return;
+  const blob = new Blob([JSON.stringify(lastData, null, 2)], {type:'application/json'});
+  dl(blob, 'soc-report.json');
+}
+
+function exportCSV() {
+  if (!allEvents.length) return;
+  const header = 'timestamp,severity,rule_id,category,source_ip,description\n';
+  const rows = allEvents.map(e =>
+    [e.timestamp, e.severity, e.rule_id, e.category, e.source_ip,
+     '"' + e.description.replace(/"/g,'""') + '"'].join(',')
+  ).join('\n');
+  dl(new Blob([header+rows], {type:'text/csv'}), 'soc-report.csv');
+}
+
+function dl(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+}
+
+// ── UI helpers ─────────────────────────────────────────────────────────────
+function showLoading(show) {
+  document.getElementById('loading').style.display = show ? 'block' : 'none';
+  document.getElementById('btnAnalyze').disabled = show;
+  if (show) document.getElementById('results').style.display = 'none';
+}
+
+function showAlert(msg, type) {
+  const el = document.getElementById('alertBanner');
+  el.textContent = msg;
+  el.className = 'alert-banner ' + type;
+  el.style.display = 'block';
+}
+
+function hideAlert() {
+  document.getElementById('alertBanner').style.display = 'none';
+}
+</script>
+</body>
+</html>
